@@ -26,7 +26,24 @@ const AgenceContext = createContext<AgenceState | undefined>(undefined)
 
 export function AgenceProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth()
-  const [choix, setChoix] = useState<string | null>(null)
+
+  // L'agence choisie est mémorisée dans le navigateur, séparément pour chaque utilisateur
+  const cleStockage = profile ? `agence-choisie-${profile.id}` : null
+  const [choix, setChoixEtat] = useState<string | null>(() => {
+    try {
+      return cleStockage ? localStorage.getItem(cleStockage) : null
+    } catch {
+      return null
+    }
+  })
+  const setChoix = (id: string) => {
+    setChoixEtat(id)
+    try {
+      if (cleStockage) localStorage.setItem(cleStockage, id)
+    } catch {
+      // stockage indisponible : le choix reste valable jusqu'au rechargement
+    }
+  }
 
   const { data: toutes = [], isSuccess } = useQuery({
     queryKey: ['agences'],

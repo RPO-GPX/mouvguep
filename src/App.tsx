@@ -10,6 +10,9 @@ import TableauDeBord from './pages/TableauDeBord'
 import Agences from './pages/Agences'
 import ArchiveBrq from './pages/ArchiveBrq'
 import Comptes from './pages/Comptes'
+import Agents from './pages/Agents'
+
+
 function RequireAuth({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   if (loading) return <p className="p-6">Chargement…</p>
@@ -31,6 +34,7 @@ export default function App() {
         <Route index element={<MouvementCaisse />} />
         <Route path="brq" element={<Brq />} />
                 <Route path="archive" element={<ArchiveBrq />} />
+                        <Route path="agents" element={<Agents />} />
                         <Route path="comptes" element={<Comptes />} />
                                 <Route path="agences" element={<Agences />} />
                 <Route path="brq/imprimer/:date" element={<BrqImpression />} />

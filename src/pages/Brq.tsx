@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useAgence } from '../contexts/AgenceContext'
 import { useBrq } from '../hooks/useBrq'
+import { useAgents } from '../hooks/useAgents'
 import { calculerBrq, NATURES_DEPENSE, totalLigne } from '../lib/calculsBrq'
 import { formatDate, jourSemaine, nomJour } from '../lib/dates'
 import { format, formatOuVide } from '../lib/format'
@@ -13,7 +14,7 @@ import CelluleTexte from '../components/CelluleTexte'
 
 const MODES_PAIEMENT = ['Espèces', 'Chèque', 'Virement']
 
-type ChampTexte = 'agent_nom' | 'n_recolte' | 'n_facture' | 'n_cheque'
+type ChampTexte = 'n_recolte' | 'n_facture' | 'n_cheque'
 type ChampEntier = 'nbre_cmd' | 'nbre_cmd_sd' | 'pu_ram'
 type ChampMontant = 'montant_recolte' | 'montant_especes'
 
@@ -61,6 +62,7 @@ export default function Brq() {
   const peutReceptionner = peutControler
 
   const { data: brq, isLoading, error } = useBrq(agence?.id ?? null, date)
+  const { data: agents = [], isSuccess: agentsCharges } = useAgents(agence?.id ?? null)
 
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ['brq', agence?.id, date] })
   const surErreur = (e: Error) => setMessage('Erreur : ' + e.message)
@@ -223,6 +225,13 @@ export default function Brq() {
       ? 'Validé · à réceptionner'
       : 'Brouillon'
 
+  // Agents actifs de l'agence, plus le nom déjà saisi sur la ligne s'il n'y figure plus
+  const nomsActifs = agents.filter((a) => a.actif).map((a) => a.nom)
+  const optionsAgents = (courant: string) => {
+    const noms = courant && !nomsActifs.includes(courant) ? [courant, ...nomsActifs] : nomsActifs
+    return noms.map((n) => ({ valeur: n, titre: n }))
+  }
+
   const texte = (id: string, champ: ChampTexte) => (v: string) => {
     majLigne.mutate({ id, patch: { [champ]: v } })
     return true
@@ -326,6 +335,16 @@ export default function Brq() {
         </div>
       </div>
 
+      {peutSaisir && !verrouille && agentsCharges && nomsActifs.length === 0 && (
+        <div className="rounded-xl bg-[#fff3e0] text-[#8a4b00] px-4 py-3 text-sm font-semibold flex flex-wrap items-center gap-3">
+          Aucun agent enregistré pour cette agence : ajoute-les d'abord pour pouvoir les
+          sélectionner dans le BRQ.
+          <button onClick={() => navigate('/agents')} className="btn btn-marine !min-h-8 !px-3 !text-xs">
+            Gérer les agents
+          </button>
+        </div>
+      )}
+
       <fieldset disabled={verrouille || !peutSaisir} className="min-w-0 border-0 p-0 m-0 space-y-5">
         <div className="carte overflow-x-auto">
           <table className="tableau">
@@ -359,7 +378,12 @@ export default function Brq() {
               {brq.lignes.map((l) => (
                 <tr key={l.id} className="hover:bg-[#f9faff]">
                   <td className={cellule}>
-                    <CelluleTexte valeur={l.agent_nom} largeur="w-40" onValider={texte(l.id, 'agent_nom')} />
+                    <Liste
+                      valeur={l.agent_nom || null}
+                      options={optionsAgents(l.agent_nom)}
+                      onChange={(v) => majLigne.mutate({ id: l.id, patch: { agent_nom: v ?? '' } })}
+                      largeur="w-44"
+                    />
                   </td>
                   <td className={cellule}>
                     <CelluleTexte valeur={l.n_recolte} onValider={texte(l.id, 'n_recolte')} />
@@ -425,14 +449,19 @@ export default function Brq() {
         </div>
 
         {peutSaisir && !verrouille && (
-          <button
-            type="button"
-            onClick={() => ajouterLigne.mutate()}
-            disabled={ajouterLigne.isPending}
-            className="btn btn-marine"
-          >
-            + Ajouter une ligne
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => ajouterLigne.mutate()}
+              disabled={ajouterLigne.isPending}
+              className="btn btn-marine"
+            >
+              + Ajouter une ligne
+            </button>
+            <button type="button" onClick={() => navigate('/agents')} className="btn btn-clair">
+              Gérer les agents
+            </button>
+          </div>
         )}
 
         <div className="grid gap-4 md:grid-cols-2">

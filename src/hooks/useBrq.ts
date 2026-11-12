@@ -5,12 +5,14 @@ import { NATURES_DEPENSE, type DepenseBrq, type LigneBrq } from '../lib/calculsB
 export type BrqComplet = {
   id: string
   numero: number
-    reference: string
-    statut: 'brouillon' | 'valide'
+  reference: string
+  statut: 'brouillon' | 'valide'
   prepare_par: string | null
   valide_par: string | null
-    recu_par: string | null
+  recu_par: string | null
   recu_le: string | null
+  lignes: LigneBrq[]
+  depenses: DepenseBrq[]
 }
 
 export function useBrq(agenceId: string | null, date: string) {
@@ -57,14 +59,14 @@ export function useBrq(agenceId: string | null, date: string) {
         .map((r) => ({ id: r.id, nature: r.nature, montant: Number(r.montant ?? 0) }) as DepenseBrq)
         .sort((a, b) => NATURES_DEPENSE.indexOf(a.nature) - NATURES_DEPENSE.indexOf(b.nature))
 
-            return {
+      return {
         id: brq.id,
         numero: Number(brq.numero),
-                reference: brq.reference ?? '',
+        reference: brq.reference ?? '',
         statut: brq.statut,
         prepare_par: brq.prepare_par ?? null,
         valide_par: brq.valide_par ?? null,
-                recu_par: brq.recu_par ?? null,
+        recu_par: brq.recu_par ?? null,
         recu_le: brq.recu_le ?? null,
         lignes,
         depenses,

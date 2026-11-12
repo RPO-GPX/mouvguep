@@ -10,14 +10,12 @@ import {
   type StatutBrqJour,
   type Verrou,
 } from '../hooks/useSuiviJours'
-import { cleCommentaire, useCommentaires, type Commentaire } from '../hooks/useCommentaires'
 import { useAvis, type Avis } from '../hooks/useAvis'
 import { calculerMouvements } from '../lib/calculs'
 import { completerJours } from '../lib/jours'
 import { finDeMois, formatDate, nomJour } from '../lib/dates'
 import { format, formatOuVide } from '../lib/format'
 import CelluleMontant from '../components/CelluleMontant'
-import PanneauCommentaires from '../components/PanneauCommentaires'
 import PanneauAvis from '../components/PanneauAvis'
 
 // TPE est un virement direct sur le compte de l'entreprise : il se compte en plus (débit)
@@ -42,14 +40,18 @@ type Champ =
   | (typeof COLONNES_CREDIT)[number][0]
   | 'montant_reel'
 
-const OPTIONS_COMMENTAIRE = [
-  { cle: 'general', titre: 'Toute la ligne' },
-  ...COLONNES_DEBIT.map(([cle, titre]) => ({ cle: cle as string, titre: titre as string })),
-  ...COLONNES_CREDIT.map(([cle, titre]) => ({ cle: cle as string, titre: titre as string })),
-  { cle: 'montant_reel', titre: 'Montant réel' },
-]
-
 const arrondi = (n: number) => Math.round(n * 100) / 100
+
+// Le mois affiché est mémorisé pendant la session (utile quand on revient d'un avis ouvert)
+const CLE_MOIS = 'mouvement-mois'
+const moisCourant = () => new Date().toISOString().slice(0, 7)
+const moisInitial = () => {
+  try {
+    return sessionStorage.getItem(CLE_MOIS) ?? moisCourant()
+  } catch {
+    return moisCourant()
+  }
+}
 
 // Style commun du bouton rond de l'avis de versement
 const BASE =
@@ -82,24 +84,6 @@ function Cadenas() {
   )
 }
 
-function IconeBulle() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-    </svg>
-  )
-}
-
 function IconeTrombone() {
   return (
     <svg
@@ -123,53 +107,6 @@ function BadgeBrq({ statut }: { statut: StatutBrqJour | undefined }) {
   if (statut === 'valide') return <span className="puce puce-attente">BRQ à réceptionner</span>
   if (statut === 'brouillon') return <span className="puce puce-neutre">BRQ en cours</span>
   return <span className="text-xs text-doux">Pas de BRQ</span>
-}
-
-// Petit triangle jaune dans le coin d'une case qui a des commentaires
-function MarqueCommentaire({
-  apercu,
-  onClick,
-}: {
-  apercu: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={apercu}
-      aria-label={apercu}
-      className="absolute top-0 right-0 w-3.5 h-3.5 bg-[#f5b301] hover:bg-[#d99f00]"
-      style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }}
-    />
-  )
-}
-
-// Bouton « Commenter » de la ligne (un par jour)
-function BoutonCommentaireJour({
-  n,
-  peutCommenter,
-  onClick,
-}: {
-  n: number
-  peutCommenter: boolean
-  onClick: () => void
-}) {
-  if (!peutCommenter && n === 0) return null
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 h-7 rounded-full px-2.5 text-xs font-bold ${
-        n > 0
-          ? 'bg-[#f5b301] text-encre'
-          : 'bg-white text-[#4a5178] border border-[#cfd5ea] hover:bg-entete'
-      }`}
-    >
-      <IconeBulle />
-      {n > 0 ? `${n} commentaire${n > 1 ? 's' : ''}` : 'Commenter'}
-    </button>
-  )
 }
 
 // Bouton des avis de versement (case V. bancaire)
@@ -272,24 +209,29 @@ export default function MouvementCaisse() {
   const { data: existants = [], isLoading, error } = useMouvements(agence?.id ?? null)
   const { data: verrousData } = useVerrous(agence?.id ?? null)
   const { data: statutsData } = useStatutsBrq(agence?.id ?? null)
-  const [mois, setMois] = useState(new Date().toISOString().slice(0, 7))
+  const [mois, setMoisEtat] = useState(moisInitial)
   const [message, setMessage] = useState<string | null>(null)
-  const [ouvert, setOuvert] = useState<{ date: string; champ: string } | null>(null)
   const [avisOuvert, setAvisOuvert] = useState<string | null>(null)
-  const { data: commentairesData } = useCommentaires(agence?.id ?? null, mois)
   const { data: avisData } = useAvis(agence?.id ?? null, mois)
+
+  const setMois = (m: string) => {
+    setMoisEtat(m)
+    try {
+      sessionStorage.setItem(CLE_MOIS, m)
+    } catch {
+      // stockage indisponible : le mois reste valable jusqu'au rechargement
+    }
+  }
 
   const verrous = verrousData ?? new Map<string, Verrou>()
   const statuts = statutsData ?? new Map<string, StatutBrqJour>()
-  const parCase = commentairesData?.parCase ?? new Map<string, Commentaire[]>()
-  const parJour = commentairesData?.parJour ?? new Map<string, Commentaire[]>()
   const avisParJour = avisData ?? new Map<string, Avis[]>()
   const nbAvis = (date: string) => avisParJour.get(date)?.length ?? 0
 
   const estAdmin = profile?.role === 'admin'
   const peutSaisir = profile?.role === 'agence' || profile?.role === 'suivi' || estAdmin
   const peutVerrouiller = peutControler
-  const peutCommenter =
+  const peutJoindre =
     profile?.role === 'agence' || profile?.role === 'suivi' || profile?.role === 'admin'
   const aujourdhui = new Date().toISOString().slice(0, 10)
 
@@ -474,7 +416,6 @@ export default function MouvementCaisse() {
                 {lignes.map((l) => {
                   const verrou = verrous.get(l.date)
                   const bloque = !!verrou || !peutSaisir
-                  const nbJour = parJour.get(l.date)?.length ?? 0
 
                   const saisir = (champ: Champ) => ({
                     onValider: (valeur: number | null) =>
@@ -511,44 +452,34 @@ export default function MouvementCaisse() {
                         {format(l.dispo)}
                       </td>
 
-                      {[...COLONNES_DEBIT, ...COLONNES_CREDIT].map(([cle]) => {
-                        const liste = parCase.get(cleCommentaire(l.date, cle)) ?? []
-                        const dernier = liste[liste.length - 1]
-                        return (
-                          <td
-                            key={cle}
-                            className={`${tdMontant} relative ${cle === 'v_bancaire' ? LARGEUR_AVIS : ''}`}
-                          >
-                            {l.jour_repos ? (
-                              formatOuVide(l[cle])
-                            ) : (
-                              <>
-                                {bloque ? (
-                                  formatOuVide(l[cle])
-                                ) : (
-                                  <CelluleMontant plein valeur={l[cle]} {...saisir(cle)} />
-                                )}
-                                {cle === 'v_bancaire' && (
-                                  <span className="absolute left-2 top-1/2 -translate-y-1/2">
-                                    <BoutonAvis
-                                      n={nbAvis(l.date)}
-                                      manquant={l.v_bancaire > 0 && nbAvis(l.date) === 0}
-                                      peutAjouter={peutCommenter}
-                                      onClick={() => setAvisOuvert(l.date)}
-                                    />
-                                  </span>
-                                )}
-                                {dernier && (
-                                  <MarqueCommentaire
-                                    apercu={`${liste.length} commentaire${liste.length > 1 ? 's' : ''} — dernier : ${dernier.auteur_nom ?? '—'} : ${dernier.texte.slice(0, 80)}`}
-                                    onClick={() => setOuvert({ date: l.date, champ: cle })}
+                      {[...COLONNES_DEBIT, ...COLONNES_CREDIT].map(([cle]) => (
+                        <td
+                          key={cle}
+                          className={`${tdMontant} relative ${cle === 'v_bancaire' ? LARGEUR_AVIS : ''}`}
+                        >
+                          {l.jour_repos ? (
+                            formatOuVide(l[cle])
+                          ) : (
+                            <>
+                              {bloque ? (
+                                formatOuVide(l[cle])
+                              ) : (
+                                <CelluleMontant plein valeur={l[cle]} {...saisir(cle)} />
+                              )}
+                              {cle === 'v_bancaire' && (
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2">
+                                  <BoutonAvis
+                                    n={nbAvis(l.date)}
+                                    manquant={l.v_bancaire > 0 && nbAvis(l.date) === 0}
+                                    peutAjouter={peutJoindre}
+                                    onClick={() => setAvisOuvert(l.date)}
                                   />
-                                )}
-                              </>
-                            )}
-                          </td>
-                        )
-                      })}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </td>
+                      ))}
 
                       <td
                         className={`${num} ${LARGEUR} font-extrabold ${l.jour_repos ? '' : 'bg-[#eaf6ef]'}`}
@@ -654,11 +585,6 @@ export default function MouvementCaisse() {
                                 </button>
                               )
                             )}
-                            <BoutonCommentaireJour
-                              n={nbJour}
-                              peutCommenter={peutCommenter}
-                              onClick={() => setOuvert({ date: l.date, champ: 'general' })}
-                            />
                           </div>
                         )}
                       </td>
@@ -674,13 +600,6 @@ export default function MouvementCaisse() {
       {lignes.length > 0 && (
         <p className="text-xs text-doux flex flex-wrap items-center gap-x-5 gap-y-2">
           <span className="inline-flex items-center gap-1.5">
-            <span
-              className="inline-block w-3.5 h-3.5 bg-[#f5b301]"
-              style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }}
-            />
-            Case commentée (survole-la pour lire le dernier commentaire)
-          </span>
-          <span className="inline-flex items-center gap-1.5">
             <span className={`${BASE} ${ORANGE}`}>
               <IconeTrombone />!
             </span>
@@ -695,28 +614,13 @@ export default function MouvementCaisse() {
         </p>
       )}
 
-      {ouvert && (
-        <PanneauCommentaires
-          key={ouvert.date + ouvert.champ}
-          agenceId={agence.id}
-          mois={mois}
-          date={ouvert.date}
-          champInitial={ouvert.champ}
-          options={OPTIONS_COMMENTAIRE}
-          commentaires={parJour.get(ouvert.date) ?? []}
-          peutCommenter={peutCommenter}
-          estAdmin={estAdmin}
-          onFermer={() => setOuvert(null)}
-        />
-      )}
-
       {avisOuvert && (
         <PanneauAvis
           agenceId={agence.id}
           mois={mois}
           date={avisOuvert}
           avis={avisParJour.get(avisOuvert) ?? []}
-          peutAjouter={peutCommenter}
+          peutAjouter={peutJoindre}
           estAdmin={estAdmin}
           onFermer={() => setAvisOuvert(null)}
         />

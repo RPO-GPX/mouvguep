@@ -29,6 +29,12 @@ const ICONES: Record<string, ReactElement> = {
       <rect x="14" y="12" width="7" height="9" rx="1" />
       <rect x="3" y="16" width="7" height="5" rx="1" />
     </>
+    ),
+  agents: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20c.8-4 3.5-6 7-6s6.2 2 7 6" />
+    </>
   ),
   agences: (
     <>
@@ -77,6 +83,12 @@ function Cadre() {
     { to: '/', titre: 'Mouvement de caisse', icone: 'caisse', visible: true },
     { to: '/brq', titre: 'BRQ', icone: 'brq', visible: true },
     { to: '/archive', titre: 'Archive BRQ', icone: 'archive', visible: true },
+        {
+      to: '/agents',
+      titre: 'Agents',
+      icone: 'agents',
+      visible: profile?.role === 'agence' || profile?.role === 'admin',
+    },
     {
       to: '/tableau-de-bord',
       titre: 'Tableau de bord',
