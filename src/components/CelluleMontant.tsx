@@ -4,6 +4,8 @@ type Props = {
   valeur: number | null
   nullable?: boolean // true : case vide = pas de valeur (ex. montant réel)
   largeur?: string
+  plein?: boolean // true : remplit la cellule du tableau, texte aligné avec le titre de la colonne
+  classe?: string
   onValider: (valeur: number | null) => void
   onInvalide: () => void
 }
@@ -12,6 +14,8 @@ export default function CelluleMontant({
   valeur,
   nullable = false,
   largeur = 'w-28',
+  plein = false,
+  classe = '',
   onValider,
   onInvalide,
 }: Props) {
@@ -38,7 +42,9 @@ export default function CelluleMontant({
         if (nouveau === valeur) return
         onValider(nouveau)
       }}
-      className={`${largeur} px-2 py-1.5 text-right tabular-nums bg-transparent border border-transparent rounded-lg hover:border-bord focus:bg-white focus:border-marine focus:ring-2 focus:ring-marine/20 outline-none`}
+      className={`${
+        plein ? 'block w-[calc(100%+1rem)] -mx-2' : largeur
+      } px-2 py-1.5 text-right tabular-nums bg-transparent border border-transparent rounded-lg hover:border-bord focus:bg-white focus:border-marine focus:ring-2 focus:ring-marine/20 outline-none ${classe}`}
     />
   )
 }

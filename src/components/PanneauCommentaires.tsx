@@ -15,9 +15,9 @@ type Props = {
   agenceId: string
   mois: string
   date: string
-  champ: string
-  titreChamp: string
-  commentaires: Commentaire[]
+  champInitial: string
+  options: { cle: string; titre: string }[]
+  commentaires: Commentaire[] // tous les commentaires du jour
   peutCommenter: boolean
   estAdmin: boolean
   onFermer: () => void
@@ -27,16 +27,19 @@ export default function PanneauCommentaires({
   agenceId,
   mois,
   date,
-  champ,
-  titreChamp,
+  champInitial,
+  options,
   commentaires,
   peutCommenter,
   estAdmin,
   onFermer,
 }: Props) {
   const queryClient = useQueryClient()
+  const [champ, setChamp] = useState(champInitial)
   const [texte, setTexte] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+
+  const titre = (cle: string) => options.find((o) => o.cle === cle)?.titre ?? cle
 
   const rafraichir = () =>
     queryClient.invalidateQueries({ queryKey: ['commentaires', agenceId, mois] })
@@ -81,7 +84,7 @@ export default function PanneauCommentaires({
       >
         <div className="flex items-start justify-between p-5 border-b border-bord">
           <div>
-            <p className="font-extrabold">Commentaires — {titreChamp}</p>
+            <p className="font-extrabold">Commentaires du jour</p>
             <p className="text-sm font-semibold text-doux">{formatDate(date)}</p>
           </div>
           <button
@@ -95,35 +98,61 @@ export default function PanneauCommentaires({
 
         <div className="p-5 space-y-3 overflow-y-auto">
           {commentaires.length === 0 && (
-            <p className="text-sm text-doux">Aucun commentaire sur cette case.</p>
+            <p className="text-sm text-doux">Aucun commentaire pour ce jour.</p>
           )}
           {commentaires.map((c) => (
-            <div key={c.id} className="bg-fond rounded-xl p-3 space-y-1">
+            <div
+              key={c.id}
+              className={`bg-fond rounded-xl p-3 space-y-1.5 ${
+                champInitial !== 'general' && c.champ === champInitial
+                  ? 'ring-2 ring-[#f5b301]'
+                  : ''
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="puce puce-verrou">{titre(c.champ)}</span>
+                <span className="text-xs text-doux">
+                  {new Date(c.cree_le).toLocaleString('fr-FR')}
+                </span>
+              </div>
+              <p className="text-sm whitespace-pre-wrap">{c.texte}</p>
               <div className="flex items-center justify-between gap-2 text-xs text-doux">
                 <span>
                   <b className="text-encre">{c.auteur_nom ?? '—'}</b>
                   {c.auteur_role && ` · ${ROLES[c.auteur_role] ?? c.auteur_role}`}
                 </span>
-                <span>{new Date(c.cree_le).toLocaleString('fr-FR')}</span>
+                {estAdmin && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Supprimer ce commentaire ?')) supprimer.mutate(c.id)
+                    }}
+                    className="font-bold text-[#b4232f] underline underline-offset-2"
+                  >
+                    Supprimer
+                  </button>
+                )}
               </div>
-              <p className="text-sm whitespace-pre-wrap">{c.texte}</p>
-              {estAdmin && (
-                <button
-                  onClick={() => {
-                    if (window.confirm('Supprimer ce commentaire ?')) supprimer.mutate(c.id)
-                  }}
-                  className="text-xs font-bold text-[#b4232f] underline underline-offset-2"
-                >
-                  Supprimer
-                </button>
-              )}
             </div>
           ))}
         </div>
 
-        <div className="p-5 border-t border-bord space-y-2">
+        <div className="p-5 border-t border-bord space-y-2.5">
           {peutCommenter ? (
             <>
+              <label className="block text-xs font-bold text-doux">
+                Colonne concernée
+                <select
+                  value={champ}
+                  onChange={(e) => setChamp(e.target.value)}
+                  className="champ h-10 mt-1 font-medium"
+                >
+                  {options.map((o) => (
+                    <option key={o.cle} value={o.cle}>
+                      {o.titre}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <textarea
                 value={texte}
                 onChange={(e) => setTexte(e.target.value)}

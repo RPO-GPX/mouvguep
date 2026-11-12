@@ -14,7 +14,7 @@ export type Commentaire = {
 
 export const cleCommentaire = (date: string, champ: string) => `${date}|${champ}`
 
-// Commentaires d'une agence pour un mois : « date|champ » -> liste
+// Commentaires d'une agence pour un mois, classés par case (date|champ) et par jour
 export function useCommentaires(agenceId: string | null, mois: string) {
   return useQuery({
     queryKey: ['commentaires', agenceId, mois],
@@ -28,12 +28,15 @@ export function useCommentaires(agenceId: string | null, mois: string) {
         .lte('date', finDeMois(mois))
         .order('cree_le')
       if (error) throw error
-      const m = new Map<string, Commentaire[]>()
+
+      const parCase = new Map<string, Commentaire[]>()
+      const parJour = new Map<string, Commentaire[]>()
       for (const r of (data ?? []) as Commentaire[]) {
         const k = cleCommentaire(r.date, r.champ)
-        m.set(k, [...(m.get(k) ?? []), r])
+        parCase.set(k, [...(parCase.get(k) ?? []), r])
+        parJour.set(r.date, [...(parJour.get(r.date) ?? []), r])
       }
-      return m
+      return { parCase, parJour }
     },
   })
 }

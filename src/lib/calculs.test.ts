@@ -31,10 +31,10 @@ describe('calculerMouvements', () => {
       m('2026-01-09', { jour_repos: true }),
     ])
 
-    const attendu = [3203175.33, 1111558.23, 832851.73, 535421.73, 982831.73, 1449661.73, 1192837.73]
+        const attendu = [3203175.33, 1286458.23, 1026251.73, 753321.73, 1257531.73, 1740001.73, 1483177.73]
     lignes.forEach((l, i) => expect(l.reste).toBeCloseTo(attendu[i], 2))
 
-    expect(lignes.map((l) => l.alerte)).toEqual([true, true, false, false, false, true, true])
+    expect(lignes.map((l) => l.alerte)).toEqual([true, true, true, false, true, true, true])
   })
 
   it('calcule le manque et le surplus', () => {

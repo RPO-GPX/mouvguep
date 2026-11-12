@@ -45,10 +45,10 @@ export function calculerMouvements(
 
     const total_debit = repos
       ? 0
-      : arrondi(m.recu_cash + m.retire_par_cheque + m.brq + m.recolte_non_envoyee + m.pmt)
+      : arrondi(m.recu_cash + m.retire_par_cheque + m.brq + m.recolte_non_envoyee + m.pmt + m.tpe)
     const total_credit = repos
       ? 0
-      : arrondi(m.depense + m.tpe + m.pmt_vendeur + m.transfert_interne + m.v_bancaire)
+      : arrondi(m.depense + m.pmt_vendeur + m.transfert_interne + m.v_bancaire)
 
     // La récolte non envoyée de la veille sort de la caisse le lendemain
     const reste = arrondi(dispo + total_debit - total_credit - recolteVeille)

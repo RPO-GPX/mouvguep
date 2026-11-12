@@ -20,17 +20,18 @@ import CelluleMontant from '../components/CelluleMontant'
 import PanneauCommentaires from '../components/PanneauCommentaires'
 import PanneauAvis from '../components/PanneauAvis'
 
+// TPE est un virement direct sur le compte de l'entreprise : il se compte en plus (débit)
 const COLONNES_DEBIT = [
   ['recu_cash', 'Reçu cash'],
   ['retire_par_cheque', 'Retiré par chèque'],
   ['brq', 'BRQ'],
   ['recolte_non_envoyee', 'Récolte non envoyée'],
   ['pmt', 'Pmt'],
+  ['tpe', 'TPE'],
 ] as const
 
 const COLONNES_CREDIT = [
   ['depense', 'Dépense'],
-  ['tpe', 'TPE'],
   ['pmt_vendeur', 'Pmt vendeur'],
   ['transfert_interne', 'Transfert interne'],
   ['v_bancaire', 'V. bancaire'],
@@ -41,22 +42,26 @@ type Champ =
   | (typeof COLONNES_CREDIT)[number][0]
   | 'montant_reel'
 
-const TITRES: Record<string, string> = {
-  montant_reel: 'Montant réel',
-  ...Object.fromEntries(COLONNES_DEBIT.map(([k, t]) => [k, t])),
-  ...Object.fromEntries(COLONNES_CREDIT.map(([k, t]) => [k, t])),
-}
+const OPTIONS_COMMENTAIRE = [
+  { cle: 'general', titre: 'Toute la ligne' },
+  ...COLONNES_DEBIT.map(([cle, titre]) => ({ cle: cle as string, titre: titre as string })),
+  ...COLONNES_CREDIT.map(([cle, titre]) => ({ cle: cle as string, titre: titre as string })),
+  { cle: 'montant_reel', titre: 'Montant réel' },
+]
 
 const arrondi = (n: number) => Math.round(n * 100) / 100
 
-// Style commun des boutons ronds d'action (commentaire, avis de versement)
+// Style commun du bouton rond de l'avis de versement
 const BASE =
   'inline-flex shrink-0 items-center justify-center gap-1 h-6 min-w-6 rounded-full px-1.5 text-[11px] font-extrabold leading-none transition-colors'
 const NEUTRE =
   'bg-white text-[#6f78a3] border border-[#cfd5ea] hover:bg-entete hover:text-marine'
-const JAUNE = 'bg-[#f5b301] text-encre'
 const VERT = 'bg-[#17653f] text-white'
 const ORANGE = 'bg-[#fff3e0] text-[#8a4b00] border border-[#f0c98a]'
+
+// Largeur minimale des colonnes de montants (le trombone demande un peu plus de place)
+const LARGEUR = 'min-w-[8.5rem]'
+const LARGEUR_AVIS = '!min-w-[10.5rem]'
 
 function Cadenas() {
   return (
@@ -120,8 +125,28 @@ function BadgeBrq({ statut }: { statut: StatutBrqJour | undefined }) {
   return <span className="text-xs text-doux">Pas de BRQ</span>
 }
 
-// Bouton des commentaires d'une case
-function BoutonCommentaire({
+// Petit triangle jaune dans le coin d'une case qui a des commentaires
+function MarqueCommentaire({
+  apercu,
+  onClick,
+}: {
+  apercu: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={apercu}
+      aria-label={apercu}
+      className="absolute top-0 right-0 w-3.5 h-3.5 bg-[#f5b301] hover:bg-[#d99f00]"
+      style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }}
+    />
+  )
+}
+
+// Bouton « Commenter » de la ligne (un par jour)
+function BoutonCommentaireJour({
   n,
   peutCommenter,
   onClick,
@@ -131,17 +156,18 @@ function BoutonCommentaire({
   onClick: () => void
 }) {
   if (!peutCommenter && n === 0) return null
-  const titre = n > 0 ? `${n} commentaire${n > 1 ? 's' : ''}` : 'Ajouter un commentaire'
   return (
     <button
       type="button"
       onClick={onClick}
-      title={titre}
-      aria-label={titre}
-      className={`${BASE} ${n > 0 ? JAUNE : NEUTRE}`}
+      className={`inline-flex items-center gap-1.5 h-7 rounded-full px-2.5 text-xs font-bold ${
+        n > 0
+          ? 'bg-[#f5b301] text-encre'
+          : 'bg-white text-[#4a5178] border border-[#cfd5ea] hover:bg-entete'
+      }`}
     >
       <IconeBulle />
-      {n > 0 && n}
+      {n > 0 ? `${n} commentaire${n > 1 ? 's' : ''}` : 'Commenter'}
     </button>
   )
 }
@@ -248,17 +274,16 @@ export default function MouvementCaisse() {
   const { data: statutsData } = useStatutsBrq(agence?.id ?? null)
   const [mois, setMois] = useState(new Date().toISOString().slice(0, 7))
   const [message, setMessage] = useState<string | null>(null)
-  const [ouvert, setOuvert] = useState<{ date: string; champ: Champ } | null>(null)
+  const [ouvert, setOuvert] = useState<{ date: string; champ: string } | null>(null)
   const [avisOuvert, setAvisOuvert] = useState<string | null>(null)
   const { data: commentairesData } = useCommentaires(agence?.id ?? null, mois)
   const { data: avisData } = useAvis(agence?.id ?? null, mois)
 
   const verrous = verrousData ?? new Map<string, Verrou>()
   const statuts = statutsData ?? new Map<string, StatutBrqJour>()
-  const commentaires = commentairesData ?? new Map<string, Commentaire[]>()
+  const parCase = commentairesData?.parCase ?? new Map<string, Commentaire[]>()
+  const parJour = commentairesData?.parJour ?? new Map<string, Commentaire[]>()
   const avisParJour = avisData ?? new Map<string, Avis[]>()
-  const nb = (date: string, champ: string) =>
-    commentaires.get(cleCommentaire(date, champ))?.length ?? 0
   const nbAvis = (date: string) => avisParJour.get(date)?.length ?? 0
 
   const estAdmin = profile?.role === 'admin'
@@ -415,10 +440,10 @@ export default function MouvementCaisse() {
               <thead>
                 <tr>
                   <th colSpan={3} className="!bg-transparent"></th>
-                  <th colSpan={5} className="text-center bg-[#e8f5ee] text-[#17653f]">
+                  <th colSpan={6} className="text-center bg-[#e8f5ee] text-[#17653f]">
                     Débit
                   </th>
-                  <th colSpan={5} className="text-center bg-[#fdecee] text-[#b4232f]">
+                  <th colSpan={4} className="text-center bg-[#fdecee] text-[#b4232f]">
                     Crédit
                   </th>
                   <th colSpan={6} className="!bg-transparent"></th>
@@ -426,18 +451,22 @@ export default function MouvementCaisse() {
                 <tr>
                   <th className="text-left">Jour</th>
                   <th className="text-left">Date</th>
-                  <th>Dispo</th>
+                  <th className={LARGEUR}>Dispo</th>
                   {COLONNES_DEBIT.map(([cle, titre]) => (
-                    <th key={cle}>{titre}</th>
+                    <th key={cle} className={LARGEUR}>
+                      {titre}
+                    </th>
                   ))}
                   {COLONNES_CREDIT.map(([cle, titre]) => (
-                    <th key={cle}>{titre}</th>
+                    <th key={cle} className={`${LARGEUR} ${cle === 'v_bancaire' ? LARGEUR_AVIS : ''}`}>
+                      {titre}
+                    </th>
                   ))}
-                  <th>Reste</th>
+                  <th className={LARGEUR}>Reste</th>
                   <th className="text-left">Notification</th>
-                  <th>Écart manque</th>
-                  <th>Écart surplus</th>
-                  <th>Montant réel</th>
+                  <th className={LARGEUR}>Écart manque</th>
+                  <th className={LARGEUR}>Écart surplus</th>
+                  <th className={LARGEUR}>Montant réel</th>
                   <th className="text-left">Contrôle</th>
                 </tr>
               </thead>
@@ -445,10 +474,22 @@ export default function MouvementCaisse() {
                 {lignes.map((l) => {
                   const verrou = verrous.get(l.date)
                   const bloque = !!verrou || !peutSaisir
+                  const nbJour = parJour.get(l.date)?.length ?? 0
 
                   const saisir = (champ: Champ) => ({
                     onValider: (valeur: number | null) =>
                       enregistrer.mutate({ date: l.date, champ, valeur }),
+                    onInvalide: () =>
+                      setMessage('Montant invalide : utilise uniquement des chiffres.'),
+                  })
+
+                  // Saisir un écart revient à enregistrer le montant réel correspondant
+                  const saisirEcart = (type: 'manque' | 'surplus') => ({
+                    onValider: (v: number | null) => {
+                      const e = v ?? 0
+                      const reel = arrondi(type === 'manque' ? l.reste - e : l.reste + e)
+                      enregistrer.mutate({ date: l.date, champ: 'montant_reel', valeur: reel })
+                    },
                     onInvalide: () =>
                       setMessage('Montant invalide : utilise uniquement des chiffres.'),
                   })
@@ -459,44 +500,59 @@ export default function MouvementCaisse() {
                       ? 'bg-[#f7f8fc]'
                       : 'hover:bg-[#f9faff]'
 
+                  const editable = !l.jour_repos && !bloque
+                  const tdMontant = `${num} ${LARGEUR} ${editable ? '!py-1' : ''}`
+
                   return (
                     <tr key={l.date} className={classeLigne}>
                       <td className="font-bold capitalize">{nomJour(l.date)}</td>
                       <td className={l.jour_repos ? '' : 'text-doux'}>{formatDate(l.date)}</td>
-                      <td className={`${num} ${l.jour_repos ? '' : 'bg-[#f4f1fb]'}`}>
+                      <td className={`${num} ${LARGEUR} ${l.jour_repos ? '' : 'bg-[#f4f1fb]'}`}>
                         {format(l.dispo)}
                       </td>
 
-                      {[...COLONNES_DEBIT, ...COLONNES_CREDIT].map(([cle]) => (
-                        <td key={cle} className={`${num} ${l.jour_repos || bloque ? '' : '!p-0'}`}>
-                          {l.jour_repos ? (
-                            formatOuVide(l[cle])
-                          ) : (
-                            <div className="flex items-center justify-end gap-1.5 pr-1.5">
-                              {bloque ? (
-                                <span>{formatOuVide(l[cle])}</span>
-                              ) : (
-                                <CelluleMontant valeur={l[cle]} {...saisir(cle)} />
-                              )}
-                              <BoutonCommentaire
-                                n={nb(l.date, cle)}
-                                peutCommenter={peutCommenter}
-                                onClick={() => setOuvert({ date: l.date, champ: cle })}
-                              />
-                              {cle === 'v_bancaire' && (
-                                <BoutonAvis
-                                  n={nbAvis(l.date)}
-                                  manquant={l.v_bancaire > 0 && nbAvis(l.date) === 0}
-                                  peutAjouter={peutCommenter}
-                                  onClick={() => setAvisOuvert(l.date)}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      ))}
+                      {[...COLONNES_DEBIT, ...COLONNES_CREDIT].map(([cle]) => {
+                        const liste = parCase.get(cleCommentaire(l.date, cle)) ?? []
+                        const dernier = liste[liste.length - 1]
+                        return (
+                          <td
+                            key={cle}
+                            className={`${tdMontant} relative ${cle === 'v_bancaire' ? LARGEUR_AVIS : ''}`}
+                          >
+                            {l.jour_repos ? (
+                              formatOuVide(l[cle])
+                            ) : (
+                              <>
+                                {bloque ? (
+                                  formatOuVide(l[cle])
+                                ) : (
+                                  <CelluleMontant plein valeur={l[cle]} {...saisir(cle)} />
+                                )}
+                                {cle === 'v_bancaire' && (
+                                  <span className="absolute left-2 top-1/2 -translate-y-1/2">
+                                    <BoutonAvis
+                                      n={nbAvis(l.date)}
+                                      manquant={l.v_bancaire > 0 && nbAvis(l.date) === 0}
+                                      peutAjouter={peutCommenter}
+                                      onClick={() => setAvisOuvert(l.date)}
+                                    />
+                                  </span>
+                                )}
+                                {dernier && (
+                                  <MarqueCommentaire
+                                    apercu={`${liste.length} commentaire${liste.length > 1 ? 's' : ''} — dernier : ${dernier.auteur_nom ?? '—'} : ${dernier.texte.slice(0, 80)}`}
+                                    onClick={() => setOuvert({ date: l.date, champ: cle })}
+                                  />
+                                )}
+                              </>
+                            )}
+                          </td>
+                        )
+                      })}
 
-                      <td className={`${num} font-extrabold ${l.jour_repos ? '' : 'bg-[#eaf6ef]'}`}>
+                      <td
+                        className={`${num} ${LARGEUR} font-extrabold ${l.jour_repos ? '' : 'bg-[#eaf6ef]'}`}
+                      >
                         {format(l.reste)}
                       </td>
                       <td>
@@ -508,36 +564,45 @@ export default function MouvementCaisse() {
                           </span>
                         )}
                       </td>
-                      <td className={`${num} ${l.ecart_manque > 0 ? 'font-bold text-[#b4232f]' : ''}`}>
-                        {formatOuVide(l.ecart_manque)}
-                      </td>
-                      <td className={num}>{formatOuVide(l.ecart_surplus)}</td>
 
-                      <td className={`${num} ${l.jour_repos || bloque ? '' : '!p-0'}`}>
-                        {!l.jour_repos && (
-                          <div className="flex items-center justify-end gap-1.5 pr-1.5">
-                            {bloque ? (
-                              <span>{l.montant_reel === null ? '' : format(l.montant_reel)}</span>
-                            ) : (
-                              <CelluleMontant
-                                valeur={l.montant_reel}
-                                nullable
-                                largeur="w-32"
-                                {...saisir('montant_reel')}
-                              />
-                            )}
-                            <BoutonCommentaire
-                              n={nb(l.date, 'montant_reel')}
-                              peutCommenter={peutCommenter}
-                              onClick={() => setOuvert({ date: l.date, champ: 'montant_reel' })}
-                            />
-                          </div>
+                      <td className={tdMontant}>
+                        {l.jour_repos ? null : bloque ? (
+                          <span className={l.ecart_manque > 0 ? 'font-bold text-[#b4232f]' : ''}>
+                            {formatOuVide(l.ecart_manque)}
+                          </span>
+                        ) : (
+                          <CelluleMontant
+                            plein
+                            valeur={l.ecart_manque}
+                            classe={l.ecart_manque > 0 ? 'font-bold text-[#b4232f]' : ''}
+                            {...saisirEcart('manque')}
+                          />
+                        )}
+                      </td>
+                      <td className={tdMontant}>
+                        {l.jour_repos ? null : bloque ? (
+                          formatOuVide(l.ecart_surplus)
+                        ) : (
+                          <CelluleMontant plein valeur={l.ecart_surplus} {...saisirEcart('surplus')} />
+                        )}
+                      </td>
+
+                      <td className={tdMontant}>
+                        {l.jour_repos ? null : bloque ? (
+                          l.montant_reel === null ? '' : format(l.montant_reel)
+                        ) : (
+                          <CelluleMontant
+                            plein
+                            nullable
+                            valeur={l.montant_reel}
+                            {...saisir('montant_reel')}
+                          />
                         )}
                       </td>
 
                       <td>
                         {!l.jour_repos && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <BadgeBrq statut={statuts.get(l.date)} />
                             {verrou ? (
                               <>
@@ -589,6 +654,11 @@ export default function MouvementCaisse() {
                                 </button>
                               )
                             )}
+                            <BoutonCommentaireJour
+                              n={nbJour}
+                              peutCommenter={peutCommenter}
+                              onClick={() => setOuvert({ date: l.date, champ: 'general' })}
+                            />
                           </div>
                         )}
                       </td>
@@ -604,16 +674,11 @@ export default function MouvementCaisse() {
       {lignes.length > 0 && (
         <p className="text-xs text-doux flex flex-wrap items-center gap-x-5 gap-y-2">
           <span className="inline-flex items-center gap-1.5">
-            <span className={`${BASE} ${NEUTRE}`}>
-              <IconeBulle />
-            </span>
-            Ajouter un commentaire
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className={`${BASE} ${JAUNE}`}>
-              <IconeBulle />2
-            </span>
-            Commentaires sur la case
+            <span
+              className="inline-block w-3.5 h-3.5 bg-[#f5b301]"
+              style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%)' }}
+            />
+            Case commentée (survole-la pour lire le dernier commentaire)
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className={`${BASE} ${ORANGE}`}>
@@ -632,12 +697,13 @@ export default function MouvementCaisse() {
 
       {ouvert && (
         <PanneauCommentaires
+          key={ouvert.date + ouvert.champ}
           agenceId={agence.id}
           mois={mois}
           date={ouvert.date}
-          champ={ouvert.champ}
-          titreChamp={TITRES[ouvert.champ] ?? ouvert.champ}
-          commentaires={commentaires.get(cleCommentaire(ouvert.date, ouvert.champ)) ?? []}
+          champInitial={ouvert.champ}
+          options={OPTIONS_COMMENTAIRE}
+          commentaires={parJour.get(ouvert.date) ?? []}
           peutCommenter={peutCommenter}
           estAdmin={estAdmin}
           onFermer={() => setOuvert(null)}
