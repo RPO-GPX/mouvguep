@@ -101,3 +101,13 @@ body {
     white-space: nowrap;
   }
 }
+@layer components {
+  .tableau-compact td {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+  .tableau-compact th {
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+  }
+}

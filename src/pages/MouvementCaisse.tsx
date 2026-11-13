@@ -65,6 +65,10 @@ const ORANGE = 'bg-[#fff3e0] text-[#8a4b00] border border-[#f0c98a]'
 const LARGEUR = 'min-w-[8.5rem]'
 const LARGEUR_AVIS = '!min-w-[10.5rem]'
 
+// Titres figés : première ligne (bandeaux) puis seconde ligne (noms des colonnes)
+const TH_HAUT = 'sticky top-0 z-20 h-8 !py-0'
+const TH_BAS = 'sticky top-8 z-20 shadow-[0_1px_0_#e4e8f2]'
+
 function Cadenas() {
   return (
     <svg
@@ -377,39 +381,42 @@ export default function MouvementCaisse() {
 
       {lignes.length > 0 && (
         <div className="carte overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="tableau">
+          <div className="overflow-auto max-h-[75vh]">
+            <table className="tableau tableau-compact">
               <thead>
                 <tr>
-                  <th colSpan={3} className="!bg-transparent"></th>
-                  <th colSpan={6} className="text-center bg-[#e8f5ee] text-[#17653f]">
+                  <th colSpan={3} className={`${TH_HAUT} !bg-white`}></th>
+                  <th colSpan={6} className={`${TH_HAUT} text-center bg-[#e8f5ee] text-[#17653f]`}>
                     Débit
                   </th>
-                  <th colSpan={4} className="text-center bg-[#fdecee] text-[#b4232f]">
+                  <th colSpan={4} className={`${TH_HAUT} text-center bg-[#fdecee] text-[#b4232f]`}>
                     Crédit
                   </th>
-                  <th colSpan={6} className="!bg-transparent"></th>
+                  <th colSpan={6} className={`${TH_HAUT} !bg-white`}></th>
                 </tr>
                 <tr>
-                  <th className="text-left">Jour</th>
-                  <th className="text-left">Date</th>
-                  <th className={LARGEUR}>Dispo</th>
+                  <th className={`${TH_BAS} text-left`}>Jour</th>
+                  <th className={`${TH_BAS} text-left`}>Date</th>
+                  <th className={`${TH_BAS} ${LARGEUR}`}>Dispo</th>
                   {COLONNES_DEBIT.map(([cle, titre]) => (
-                    <th key={cle} className={LARGEUR}>
+                    <th key={cle} className={`${TH_BAS} ${LARGEUR}`}>
                       {titre}
                     </th>
                   ))}
                   {COLONNES_CREDIT.map(([cle, titre]) => (
-                    <th key={cle} className={`${LARGEUR} ${cle === 'v_bancaire' ? LARGEUR_AVIS : ''}`}>
+                    <th
+                      key={cle}
+                      className={`${TH_BAS} ${LARGEUR} ${cle === 'v_bancaire' ? LARGEUR_AVIS : ''}`}
+                    >
                       {titre}
                     </th>
                   ))}
-                  <th className={LARGEUR}>Reste</th>
-                  <th className="text-left">Notification</th>
-                  <th className={LARGEUR}>Écart manque</th>
-                  <th className={LARGEUR}>Écart surplus</th>
-                  <th className={LARGEUR}>Montant réel</th>
-                  <th className="text-left">Contrôle</th>
+                  <th className={`${TH_BAS} ${LARGEUR}`}>Reste</th>
+                  <th className={`${TH_BAS} text-left`}>Notification</th>
+                  <th className={`${TH_BAS} ${LARGEUR}`}>Écart manque</th>
+                  <th className={`${TH_BAS} ${LARGEUR}`}>Écart surplus</th>
+                  <th className={`${TH_BAS} ${LARGEUR}`}>Montant réel</th>
+                  <th className={`${TH_BAS} text-left`}>Contrôle</th>
                 </tr>
               </thead>
               <tbody>
@@ -441,8 +448,9 @@ export default function MouvementCaisse() {
                       ? 'bg-[#f7f8fc]'
                       : 'hover:bg-[#f9faff]'
 
+                  // Case modifiable : l'input remplit toute la cellule (aucune marge interne)
                   const editable = !l.jour_repos && !bloque
-                  const tdMontant = `${num} ${LARGEUR} ${editable ? '!py-1' : ''}`
+                  const tdMontant = `${num} ${LARGEUR} ${editable ? '!p-0' : ''}`
 
                   return (
                     <tr key={l.date} className={classeLigne}>
@@ -531,9 +539,9 @@ export default function MouvementCaisse() {
                         )}
                       </td>
 
-                      <td>
+                      <td className="whitespace-nowrap">
                         {!l.jour_repos && (
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap">
                             <BadgeBrq statut={statuts.get(l.date)} />
                             {verrou ? (
                               <>
@@ -579,7 +587,7 @@ export default function MouvementCaisse() {
                                     )
                                       changerVerrou.mutate({ date: l.date, action: 'verrouiller' })
                                   }}
-                                  className="btn btn-marine !min-h-8 !px-3 !text-xs"
+                                  className="btn btn-marine !min-h-7 !px-3 !text-xs"
                                 >
                                   Verrouiller
                                 </button>

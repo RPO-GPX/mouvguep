@@ -1,16 +1,26 @@
 import { useState } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useAgence, type Agence } from '../contexts/AgenceContext'
-import { chargerMouvements } from '../hooks/useMouvements'
-import { calculerMouvements } from '../lib/calculs'
-import { completerJours } from '../lib/jours'
 import { ajouterJours, finDeMois, formatDate, jourSemaine, nomJour } from '../lib/dates'
 import { format, formatOuVide } from '../lib/format'
 
 type StatutBrq = 'recu' | 'valide' | 'brouillon' | null
+
+// Une ligne renvoyée par la fonction SQL situation_agences
+type Situation = {
+  agence_id: string
+  demarre: boolean
+  reste: number | null
+  alerte: boolean
+  derniere_saisie: string | null
+  manque: number
+  surplus: number
+  brq_statut: StatutBrq
+  verrouille: boolean
+}
 
 type LigneAgence = {
   agence: Agence
@@ -33,82 +43,42 @@ export default function TableauDeBord() {
   const moisCourant = aujourdhui.slice(0, 7)
   const [dateRef, setDateRef] = useState(aujourdhui)
 
-  // Même clé que la page Mouvement de caisse : les données sont partagées
-  const resultats = useQueries({
-    queries: agences.map((a) => ({
-      queryKey: ['mouvements', a.id],
-      queryFn: () => chargerMouvements(a.id),
-    })),
-  })
-
-  const { data: brqJour = [] } = useQuery({
-    queryKey: ['brq-jour', dateRef],
+  // Une seule requête : la base calcule la situation de toutes les agences à la date choisie
+  const {
+    data: situation = [],
+    isLoading,
+    isFetching,
+    error,
+  } = useQuery({
+    queryKey: ['situation-agences', dateRef],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('brq')
-        .select('agence_id, statut, recu_le')
-        .eq('date', dateRef)
+      const { data, error } = await supabase.rpc('situation_agences', { p_date: dateRef })
       if (error) throw error
-      return (data ?? []) as {
-        agence_id: string
-        statut: 'valide' | 'brouillon'
-        recu_le: string | null
-      }[]
+      return (data ?? []) as Situation[]
     },
-  })
-
-  const { data: verrousJour = [] } = useQuery({
-    queryKey: ['verrous-jour', dateRef],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('mouvements_caisse')
-        .select('agence_id')
-        .eq('date', dateRef)
-        .eq('verrouille', true)
-      if (error) throw error
-      return (data ?? []).map((r) => r.agence_id as string)
-    },
+    placeholderData: keepPreviousData,
   })
 
   if (!profile || profile.role === 'agence') return <Navigate to="/" replace />
-  if (agences.length === 0 || resultats.some((r) => r.isLoading)) {
-    return <p className="text-doux">Chargement…</p>
-  }
-  const erreur = resultats.find((r) => r.error)?.error
-  if (erreur) return <p className="text-[#b4232f]">Erreur : {erreur.message}</p>
+  if (agences.length === 0 || isLoading) return <p className="text-doux">Chargement…</p>
+  if (error) return <p className="text-[#b4232f]">Erreur : {error.message}</p>
 
   const mois = dateRef.slice(0, 7)
+  const parAgence = new Map(situation.map((s) => [s.agence_id, s]))
 
-  const lignes: LigneAgence[] = agences.map((agence, i) => {
-    const existants = resultats[i]?.data ?? []
-    const b = brqJour.find((x) => x.agence_id === agence.id)
-    const brq: StatutBrq = b ? (b.recu_le ? 'recu' : b.statut) : null
-    const verrouille = verrousJour.includes(agence.id)
-
-    if (existants.length === 0) {
-      return { agence, etat: null, derniereSaisie: null, manque: 0, surplus: 0, brq, verrouille }
-    }
-
-    const calcul = calculerMouvements(
-      completerJours(existants, dateRef),
-      Number(agence.seuil_alerte),
-    )
-    const jusqueLa = calcul.filter((l) => l.date <= dateRef)
-    const courant = jusqueLa[jusqueLa.length - 1]
-    const duMois = jusqueLa.filter((l) => l.date.startsWith(mois))
-    const dates = existants
-      .map((m) => m.date)
-      .filter((d) => d <= dateRef)
-      .sort()
-
+  const lignes: LigneAgence[] = agences.map((agence) => {
+    const s = parAgence.get(agence.id)
     return {
       agence,
-      etat: courant ? { reste: courant.reste, alerte: courant.alerte } : null,
-      derniereSaisie: dates[dates.length - 1] ?? null,
-      manque: arrondi(duMois.reduce((s, l) => s + l.ecart_manque, 0)),
-      surplus: arrondi(duMois.reduce((s, l) => s + l.ecart_surplus, 0)),
-      brq,
-      verrouille,
+      etat:
+        s && s.demarre && s.reste !== null
+          ? { reste: Number(s.reste), alerte: s.alerte }
+          : null,
+      derniereSaisie: s?.derniere_saisie ?? null,
+      manque: Number(s?.manque ?? 0),
+      surplus: Number(s?.surplus ?? 0),
+      brq: s?.brq_statut ?? null,
+      verrouille: s?.verrouille ?? false,
     }
   })
 
@@ -140,6 +110,7 @@ export default function TableauDeBord() {
         <h1 className="text-3xl font-extrabold tracking-tight">Tableau de bord</h1>
         <p className="text-sm font-semibold text-doux">
           Situation au <span className="capitalize">{nomJour(dateRef)}</span> {formatDate(dateRef)}
+          {isFetching && <span className="ml-2 font-normal">· actualisation…</span>}
         </p>
       </header>
 
