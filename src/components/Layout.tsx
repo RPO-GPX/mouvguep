@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { AgenceProvider, useAgence } from '../contexts/AgenceContext'
+import { ConfirmProvider, useConfirmer } from './ConfirmProvider'
 
 const ICONES: Record<string, ReactElement> = {
   caisse: (
@@ -78,6 +79,7 @@ const ROLES: Record<string, string> = {
 function Cadre() {
   const { profile, signOut } = useAuth()
   const { agences, agenceId, agence, setAgenceId, chargees } = useAgence()
+  const confirmer = useConfirmer()
 
   const items = [
     { to: '/', titre: 'Mouvement de caisse', icone: 'caisse', visible: true },
@@ -139,7 +141,17 @@ function Cadre() {
               <div className="text-xs text-doux truncate">{ROLES[profile?.role ?? 'agence']}</div>
             </div>
           </div>
-          <button onClick={signOut} className="btn btn-clair">
+                    <button
+            onClick={async () => {
+              const ok = await confirmer({
+                titre: 'Te déconnecter ?',
+                message: "Tu devras te reconnecter pour accéder à l'application.",
+                confirmer: 'Se déconnecter',
+              })
+              if (ok) signOut()
+            }}
+            className="btn btn-clair"
+          >
             Déconnexion
           </button>
         </div>
@@ -186,7 +198,9 @@ function Cadre() {
 export default function Layout() {
   return (
     <AgenceProvider>
-      <Cadre />
+      <ConfirmProvider>
+        <Cadre />
+      </ConfirmProvider>
     </AgenceProvider>
   )
 }

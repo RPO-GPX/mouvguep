@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useAgence } from '../contexts/AgenceContext'
+import { useConfirmer } from '../components/ConfirmProvider'
 
 type RoleCompte = 'agence' | 'suivi' | 'regional'
 
@@ -57,6 +58,7 @@ export default function Comptes() {
   const { profile } = useAuth()
   const { agences } = useAgence()
   const queryClient = useQueryClient()
+  const confirmer = useConfirmer()
 
   const [nom, setNom] = useState('')
   const [email, setEmail] = useState('')
@@ -487,13 +489,18 @@ export default function Comptes() {
                         Mot de passe
                       </button>
                       <button
-                        onClick={() => {
+                                                onClick={async () => {
                           const desactiver = c.actif
-                          const ok = window.confirm(
-                            desactiver
-                              ? `Désactiver le compte de ${c.nom ?? c.email} ?\nIl ne pourra plus se connecter (une session déjà ouverte peut rester active jusqu'à une heure).`
+                          const ok = await confirmer({
+                            titre: desactiver
+                              ? `Désactiver le compte de ${c.nom ?? c.email} ?`
                               : `Réactiver le compte de ${c.nom ?? c.email} ?`,
-                          )
+                            message: desactiver
+                              ? "Il ne pourra plus se connecter (une session déjà ouverte peut rester active jusqu'à une heure)."
+                              : undefined,
+                            confirmer: desactiver ? 'Désactiver' : 'Réactiver',
+                            danger: desactiver,
+                          })
                           if (ok)
                             action.mutate({
                               action: desactiver ? 'desactiver' : 'reactiver',

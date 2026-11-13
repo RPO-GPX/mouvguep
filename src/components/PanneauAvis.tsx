@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { BUCKET_AVIS, type Avis } from '../hooks/useAvis'
 import { formatDate } from '../lib/dates'
+import { useConfirmer } from './ConfirmProvider'
 
 const ROLES: Record<string, string> = {
   agence: 'Caissier',
@@ -39,6 +40,7 @@ export default function PanneauAvis({
   onFermer,
 }: Props) {
   const queryClient = useQueryClient()
+  const confirmer = useConfirmer()
   const [message, setMessage] = useState<string | null>(null)
 
   const rafraichir = () => queryClient.invalidateQueries({ queryKey: ['avis', agenceId, mois] })
@@ -164,9 +166,14 @@ export default function PanneauAvis({
               </div>
               {estAdmin && (
                 <button
-                  onClick={() => {
-                    if (window.confirm(`Supprimer définitivement « ${a.nom_fichier} » ?`))
-                      supprimer.mutate(a)
+                                    onClick={async () => {
+                    const ok = await confirmer({
+                      titre: `Supprimer « ${a.nom_fichier} » ?`,
+                      message: 'Le fichier sera supprimé définitivement.',
+                      confirmer: 'Supprimer',
+                      danger: true,
+                    })
+                    if (ok) supprimer.mutate(a)
                   }}
                   className="text-xs font-bold text-[#b4232f] underline underline-offset-2"
                 >

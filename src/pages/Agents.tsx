@@ -5,11 +5,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useAgence } from '../contexts/AgenceContext'
 import { useAgents, type Agent } from '../hooks/useAgents'
+import { useConfirmer } from '../components/ConfirmProvider'
 
 export default function Agents() {
   const { profile } = useAuth()
   const { agence } = useAgence()
   const queryClient = useQueryClient()
+  const confirmer = useConfirmer()
   const navigate = useNavigate()
 
   const [nom, setNom] = useState('')
@@ -160,14 +162,19 @@ export default function Agents() {
                         Renommer
                       </button>
                       <button
-                        onClick={() => {
+                                              onClick={async () => {
                           if (
-                            !a.actif ||
-                            window.confirm(
-                              `Désactiver ${a.nom} ? Il n'apparaîtra plus dans la liste du BRQ, mais restera sur les BRQ déjà saisis.`,
-                            )
+                            a.actif &&
+                            !(await confirmer({
+                              titre: `Désactiver ${a.nom} ?`,
+                              message:
+                                "Il n'apparaîtra plus dans la liste du BRQ, mais restera sur les BRQ déjà saisis.",
+                              confirmer: 'Désactiver',
+                              danger: true,
+                            }))
                           )
-                            basculer.mutate(a)
+                            return
+                          basculer.mutate(a)
                         }}
                         className={`text-xs font-bold underline underline-offset-2 ${
                           a.actif ? 'text-[#b4232f]' : 'text-[#17653f]'

@@ -17,6 +17,7 @@ import { finDeMois, formatDate, nomJour } from '../lib/dates'
 import { format, formatOuVide } from '../lib/format'
 import CelluleMontant from '../components/CelluleMontant'
 import PanneauAvis from '../components/PanneauAvis'
+import { useConfirmer } from '../components/ConfirmProvider'
 
 // TPE est un virement direct sur le compte de l'entreprise : il se compte en plus (débit)
 const COLONNES_DEBIT = [
@@ -65,9 +66,17 @@ const ORANGE = 'bg-[#fff3e0] text-[#8a4b00] border border-[#f0c98a]'
 const LARGEUR = 'min-w-[8.5rem]'
 const LARGEUR_AVIS = '!min-w-[10.5rem]'
 
-// Titres figés : première ligne (bandeaux) puis seconde ligne (noms des colonnes)
+// Colonnes figées à gauche : Jour (6,5 rem) puis Date (6 rem)
+const COL_JOUR = 'w-[6.5rem] min-w-[6.5rem]'
+const COL_DATE = 'w-[6rem] min-w-[6rem]'
+
+// Titres figés en haut : première ligne (bandeaux) puis seconde ligne (noms des colonnes)
 const TH_HAUT = 'sticky top-0 z-20 h-8 !py-0'
 const TH_BAS = 'sticky top-8 z-20 shadow-[0_1px_0_#e4e8f2]'
+const TH_JOUR = `${TH_BAS} left-0 !z-30 text-left ${COL_JOUR}`
+const TH_DATE = `sticky top-8 left-[6.5rem] !z-30 !shadow-[0_1px_0_#e4e8f2,1px_0_0_#e4e8f2] text-left ${COL_DATE}`
+const TD_JOUR = `sticky left-0 z-10 bg-inherit font-bold capitalize ${COL_JOUR}`
+const TD_DATE = `sticky left-[6.5rem] z-10 bg-inherit shadow-[1px_0_0_#e4e8f2] ${COL_DATE}`
 
 function Cadenas() {
   return (
@@ -210,6 +219,7 @@ export default function MouvementCaisse() {
   const { profile } = useAuth()
   const { agence, peutControler } = useAgence()
   const queryClient = useQueryClient()
+  const confirmer = useConfirmer()
   const { data: existants = [], isLoading, error } = useMouvements(agence?.id ?? null)
   const { data: verrousData } = useVerrous(agence?.id ?? null)
   const { data: statutsData } = useStatutsBrq(agence?.id ?? null)
@@ -385,7 +395,8 @@ export default function MouvementCaisse() {
             <table className="tableau tableau-compact">
               <thead>
                 <tr>
-                  <th colSpan={3} className={`${TH_HAUT} !bg-white`}></th>
+                  <th colSpan={2} className={`${TH_HAUT} left-0 !z-30 !bg-white`}></th>
+                  <th className={`${TH_HAUT} !bg-white`}></th>
                   <th colSpan={6} className={`${TH_HAUT} text-center bg-[#e8f5ee] text-[#17653f]`}>
                     Débit
                   </th>
@@ -395,8 +406,8 @@ export default function MouvementCaisse() {
                   <th colSpan={6} className={`${TH_HAUT} !bg-white`}></th>
                 </tr>
                 <tr>
-                  <th className={`${TH_BAS} text-left`}>Jour</th>
-                  <th className={`${TH_BAS} text-left`}>Date</th>
+                  <th className={TH_JOUR}>Jour</th>
+                  <th className={TH_DATE}>Date</th>
                   <th className={`${TH_BAS} ${LARGEUR}`}>Dispo</th>
                   {COLONNES_DEBIT.map(([cle, titre]) => (
                     <th key={cle} className={`${TH_BAS} ${LARGEUR}`}>
@@ -442,11 +453,12 @@ export default function MouvementCaisse() {
                       setMessage('Montant invalide : utilise uniquement des chiffres.'),
                   })
 
+                  // Fonds opaques : les colonnes figées ne doivent pas laisser voir ce qui défile dessous
                   const classeLigne = l.jour_repos
                     ? 'bg-[#fdecee] text-[#b4232f]'
                     : verrou
                       ? 'bg-[#f7f8fc]'
-                      : 'hover:bg-[#f9faff]'
+                      : 'bg-white hover:bg-[#f9faff]'
 
                   // Case modifiable : l'input remplit toute la cellule (aucune marge interne)
                   const editable = !l.jour_repos && !bloque
@@ -454,8 +466,10 @@ export default function MouvementCaisse() {
 
                   return (
                     <tr key={l.date} className={classeLigne}>
-                      <td className="font-bold capitalize">{nomJour(l.date)}</td>
-                      <td className={l.jour_repos ? '' : 'text-doux'}>{formatDate(l.date)}</td>
+                      <td className={TD_JOUR}>{nomJour(l.date)}</td>
+                      <td className={`${TD_DATE} ${l.jour_repos ? '' : 'text-doux'}`}>
+                        {formatDate(l.date)}
+                      </td>
                       <td className={`${num} ${LARGEUR} ${l.jour_repos ? '' : 'bg-[#f4f1fb]'}`}>
                         {format(l.dispo)}
                       </td>
@@ -558,12 +572,13 @@ export default function MouvementCaisse() {
                                 </span>
                                 {peutVerrouiller && (
                                   <button
-                                    onClick={() => {
-                                      if (
-                                        window.confirm(
-                                          `Déverrouiller le ${formatDate(l.date)} ? L'agence pourra de nouveau modifier cette ligne.`,
-                                        )
-                                      )
+                                    onClick={async () => {
+                                      const ok = await confirmer({
+                                        titre: `Déverrouiller le ${formatDate(l.date)} ?`,
+                                        message: "L'agence pourra de nouveau modifier cette ligne.",
+                                        confirmer: 'Déverrouiller',
+                                      })
+                                      if (ok)
                                         changerVerrou.mutate({
                                           date: l.date,
                                           action: 'deverrouiller',
@@ -579,12 +594,13 @@ export default function MouvementCaisse() {
                               peutVerrouiller &&
                               l.date <= aujourdhui && (
                                 <button
-                                  onClick={() => {
-                                    if (
-                                      window.confirm(
-                                        `Verrouiller le ${formatDate(l.date)} ? La ligne ne sera plus modifiable par l'agence.`,
-                                      )
-                                    )
+                                  onClick={async () => {
+                                    const ok = await confirmer({
+                                      titre: `Verrouiller le ${formatDate(l.date)} ?`,
+                                      message: "La ligne ne sera plus modifiable par l'agence.",
+                                      confirmer: 'Verrouiller',
+                                    })
+                                    if (ok)
                                       changerVerrou.mutate({ date: l.date, action: 'verrouiller' })
                                   }}
                                   className="btn btn-marine !min-h-7 !px-3 !text-xs"

@@ -11,6 +11,7 @@ import { formatDate, jourSemaine, nomJour } from '../lib/dates'
 import { format, formatOuVide } from '../lib/format'
 import CelluleMontant from '../components/CelluleMontant'
 import CelluleTexte from '../components/CelluleTexte'
+import { useConfirmer } from '../components/ConfirmProvider'
 
 const MODES_PAIEMENT = ['Espèces', 'Chèque', 'Virement']
 
@@ -50,6 +51,7 @@ export default function Brq() {
   const { agence, peutControler } = useAgence()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const confirmer = useConfirmer()
   const [params] = useSearchParams()
   const dateUrl = params.get('date')
   const [date, setDate] = useState(
@@ -145,6 +147,15 @@ export default function Brq() {
   const receptionner = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc('receptionner_brq', { p_brq_id: brq!.id })
+      if (error) throw error
+    },
+    onSuccess: surSucces,
+    onError: surErreur,
+  })
+
+  const annulerReception = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('annuler_reception_brq', { p_brq_id: brq!.id })
       if (error) throw error
     },
     onSuccess: surSucces,
@@ -286,10 +297,12 @@ export default function Brq() {
 
           {!verrouille && peutSaisir && (
             <button
-              onClick={() => {
-                const ok = window.confirm(
-                  `Valider le BRQ du ${formatDate(date)} ?\n\nIl sera verrouillé et transmis à la caisse :\nBRQ = ${format(totaux.total_recettes)}\nPmt vendeur = ${format(totaux.paiement_vendeurs)}`,
-                )
+              onClick={async () => {
+                const ok = await confirmer({
+                  titre: `Valider le BRQ du ${formatDate(date)} ?`,
+                  message: `Il sera verrouillé et transmis à la caisse :\nBRQ = ${format(totaux.total_recettes)}\nPmt vendeur = ${format(totaux.paiement_vendeurs)}`,
+                  confirmer: 'Valider le BRQ',
+                })
                 if (ok) valider.mutate()
               }}
               disabled={valider.isPending}
@@ -305,10 +318,12 @@ export default function Brq() {
 
           {verrouille && !brq.recu_le && peutReceptionner && (
             <button
-              onClick={() => {
-                const ok = window.confirm(
-                  `Réceptionner le BRQ du ${formatDate(date)} ?\n\nTotal recettes espèces : ${format(totaux.total_recettes)}\nPaiement vendeurs : ${format(totaux.paiement_vendeurs)}`,
-                )
+              onClick={async () => {
+                const ok = await confirmer({
+                  titre: `Réceptionner le BRQ du ${formatDate(date)} ?`,
+                  message: `Total recettes espèces : ${format(totaux.total_recettes)}\nPaiement vendeurs : ${format(totaux.paiement_vendeurs)}`,
+                  confirmer: 'Réceptionner',
+                })
                 if (ok) receptionner.mutate()
               }}
               disabled={receptionner.isPending}
@@ -318,19 +333,48 @@ export default function Brq() {
             </button>
           )}
 
-          {verrouille && peutSaisir && (
+          {verrouille && brq.recu_le && peutReceptionner && (
             <button
-              onClick={() => {
-                const question = brq.recu_le
-                  ? 'Ce BRQ est déjà réceptionné. Le rouvrir annule la réception : le chargé de suivi devra le réceptionner de nouveau. Continuer ?'
-                  : 'Rouvrir ce BRQ pour le modifier ?'
-                if (window.confirm(question)) rouvrir.mutate()
+              onClick={async () => {
+                const ok = await confirmer({
+                  titre: 'Annuler la réception ?',
+                  message:
+                    "Le BRQ repassera « à réceptionner » et l'agence pourra le rouvrir pour le corriger.",
+                  confirmer: 'Annuler la réception',
+                  danger: true,
+                })
+                if (ok) annulerReception.mutate()
+              }}
+              disabled={annulerReception.isPending}
+              className="btn btn-clair"
+            >
+              Annuler la réception
+            </button>
+          )}
+
+          {verrouille && peutSaisir && (!brq.recu_le || estAdmin) && (
+            <button
+              onClick={async () => {
+                const ok = await confirmer({
+                  titre: 'Rouvrir ce BRQ ?',
+                  message: brq.recu_le
+                    ? 'Ce BRQ est déjà réceptionné. Le rouvrir annule la réception : le chargé de suivi devra le réceptionner de nouveau.'
+                    : 'Il redeviendra un brouillon modifiable. Tu devras le valider de nouveau.',
+                  confirmer: 'Rouvrir le BRQ',
+                })
+                if (ok) rouvrir.mutate()
               }}
               disabled={rouvrir.isPending}
               className="btn btn-clair"
             >
               Rouvrir le BRQ
             </button>
+          )}
+
+          {verrouille && brq.recu_le && peutSaisir && !estAdmin && (
+            <span className="text-sm text-doux">
+              BRQ réceptionné : seul le chargé de suivi peut annuler la réception.
+            </span>
           )}
         </div>
       </div>
@@ -422,8 +466,14 @@ export default function Brq() {
                   </td>
                   <td>
                     <button
-                      onClick={() => {
-                        if (window.confirm('Supprimer cette ligne ?')) supprimerLigne.mutate(l.id)
+                      onClick={async () => {
+                        const ok = await confirmer({
+                          titre: 'Supprimer cette ligne ?',
+                          message: 'Cette action est définitive.',
+                          confirmer: 'Supprimer',
+                          danger: true,
+                        })
+                        if (ok) supprimerLigne.mutate(l.id)
                       }}
                       className="text-[#b4232f] font-bold disabled:text-slate-300"
                       title="Supprimer la ligne"

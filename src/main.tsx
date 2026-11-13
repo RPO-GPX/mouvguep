@@ -6,7 +6,10 @@ import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './contexts/AuthContext.tsx'
 
-const queryClient = new QueryClient()
+// Pas de rechargement automatique des données quand on revient sur l'onglet
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false } },
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { analyserMontant, format } from '../lib/format'
+import { useConfirmer } from '../components/ConfirmProvider'
 
 type AgenceAdmin = {
   id: string
@@ -19,6 +20,7 @@ const REGIONS = ['Est', 'Ouest', 'Centre', 'Sud']
 export default function Agences() {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
+  const confirmer = useConfirmer()
 
   const [nom, setNom] = useState('')
   const [region, setRegion] = useState('Est')
@@ -271,12 +273,17 @@ export default function Agences() {
                       Modifier
                     </button>
                     <button
-                      onClick={() => {
-                        const ok = window.confirm(
-                          a.actif
-                            ? `Désactiver l'agence ${a.nom} ?\n\nElle disparaîtra des listes et des tableaux de bord, et plus personne (sauf toi) ne pourra y saisir. Ses données sont conservées.`
+                                            onClick={async () => {
+                        const ok = await confirmer({
+                          titre: a.actif
+                            ? `Désactiver l'agence ${a.nom} ?`
                             : `Réactiver l'agence ${a.nom} ?`,
-                        )
+                          message: a.actif
+                            ? 'Elle disparaîtra des listes et des tableaux de bord, et plus personne (sauf toi) ne pourra y saisir. Ses données sont conservées.'
+                            : undefined,
+                          confirmer: a.actif ? 'Désactiver' : 'Réactiver',
+                          danger: a.actif,
+                        })
                         if (ok) basculer.mutate(a)
                       }}
                       className={`text-xs font-bold underline underline-offset-2 ${

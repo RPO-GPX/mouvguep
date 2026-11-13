@@ -19,6 +19,11 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | undefined>(undefined)
 
+// Garde la session actuelle tant que c'est le même utilisateur :
+// Supabase renvoie un événement à chaque retour sur l'onglet, il ne doit rien recharger.
+const memeUtilisateur = (ancienne: Session | null, nouvelle: Session | null) =>
+  ancienne?.user.id === nouvelle?.user.id ? ancienne : nouvelle
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -27,12 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 1. Suivre la connexion / déconnexion
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+      setSession((ancienne) => memeUtilisateur(ancienne, data.session))
       if (!data.session) setLoading(false)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession)
-      if (!newSession) {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, nouvelle) => {
+      setSession((ancienne) => memeUtilisateur(ancienne, nouvelle))
+      if (!nouvelle) {
         setProfile(null)
         setLoading(false)
       }
@@ -40,15 +45,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  // 2. Charger le profil (nom, rôle, agence) une fois connecté
+  // 2. Charger le profil (nom, rôle, agence) quand l'utilisateur change, pas à chaque événement
+  const userId = session?.user.id ?? null
   useEffect(() => {
-    if (!session) return
+    if (!userId) return
     let annule = false
     setLoading(true)
     supabase
       .from('profiles')
       .select('*')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .maybeSingle()
       .then(({ data }) => {
         if (annule) return
@@ -58,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       annule = true
     }
-  }, [session])
+  }, [userId])
 
   async function signOut() {
     await supabase.auth.signOut()
