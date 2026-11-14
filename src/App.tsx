@@ -11,6 +11,7 @@ import Agences from './pages/Agences'
 import ArchiveBrq from './pages/ArchiveBrq'
 import Comptes from './pages/Comptes'
 import Agents from './pages/Agents'
+import Journal from './pages/Journal'
 
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -34,6 +35,7 @@ export default function App() {
         <Route index element={<MouvementCaisse />} />
         <Route path="brq" element={<Brq />} />
                 <Route path="archive" element={<ArchiveBrq />} />
+                        <Route path="journal" element={<Journal />} />
                         <Route path="agents" element={<Agents />} />
                         <Route path="comptes" element={<Comptes />} />
                                 <Route path="agences" element={<Agences />} />

@@ -43,6 +43,12 @@ const ICONES: Record<string, ReactElement> = {
       <path d="M8 8h2M8 12h2M8 16h2" />
     </>
   ),
+    journal: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
   comptes: (
     <>
       <circle cx="9" cy="8" r="3.5" />
@@ -95,6 +101,12 @@ function Cadre() {
       to: '/tableau-de-bord',
       titre: 'Tableau de bord',
       icone: 'tableau',
+      visible: !!profile && profile.role !== 'agence',
+    },
+        {
+      to: '/journal',
+      titre: "Journal d'audit",
+      icone: 'journal',
       visible: !!profile && profile.role !== 'agence',
     },
     { to: '/agences', titre: 'Agences', icone: 'agences', visible: profile?.role === 'admin' },
